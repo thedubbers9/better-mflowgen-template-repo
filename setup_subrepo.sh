@@ -46,7 +46,6 @@ update_submodule() {
 
     cd - >/dev/null || return 1
     git add "$SUBMODULE_PATH"
-    git commit -m "Update $SUBMODULE_PATH submodule to latest $BRANCH" >/dev/null 2>&1 || echo "(no submodule changes to commit)"
     echo "Submodule updated to latest commit on '$BRANCH'."
   else
     echo "Submodule directory '$SUBMODULE_PATH' not found. Run without -u first."
