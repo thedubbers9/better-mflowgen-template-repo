@@ -19,60 +19,67 @@ while getopts "u" opt; do
   esac
 done
 
-# Function to determine the current branch of the submodule
+# Determine which branch the submodule tracks (handles detached HEAD)
 get_submodule_branch() {
-  cd "$SUBMODULE_PATH" || exit 1
-  BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "main")
-  cd - >/dev/null
+  cd "$SUBMODULE_PATH" || return 1
+  BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
+  if [ -z "$BRANCH" ]; then
+    BRANCH=$(git remote show origin | grep 'HEAD branch' | awk '{print $NF}')
+  fi
+  if [ -z "$BRANCH" ]; then
+    BRANCH="main"
+  fi
+  cd - >/dev/null || return 1
   echo "$BRANCH"
 }
 
-# Function to update the submodule
+# Update submodule to latest commit on its branch
 update_submodule() {
   if [ -d "$SUBMODULE_PATH" ]; then
     BRANCH=$(get_submodule_branch)
-    echo "🔄 Updating '$SUBMODULE_PATH' on branch '$BRANCH'..."
-    cd "$SUBMODULE_PATH" || exit 1
+    echo "Updating '$SUBMODULE_PATH' on branch '$BRANCH'..."
+    cd "$SUBMODULE_PATH" || return 1
+
     git fetch origin "$BRANCH"
-    git checkout "$BRANCH"
+    git checkout "$BRANCH" 2>/dev/null || git checkout -b "$BRANCH" "origin/$BRANCH"
     git pull origin "$BRANCH"
-    cd - >/dev/null
+
+    cd - >/dev/null || return 1
     git add "$SUBMODULE_PATH"
-    git commit -m "Update $SUBMODULE_PATH submodule to latest $BRANCH" || true
+    git commit -m "Update $SUBMODULE_PATH submodule to latest $BRANCH" >/dev/null 2>&1 || echo "(no submodule changes to commit)"
     echo "Submodule updated to latest commit on '$BRANCH'."
   else
     echo "Submodule directory '$SUBMODULE_PATH' not found. Run without -u first."
-    exit 1
   fi
 }
 
-# If -u passed, update submodule first
+# Add submodule if missing
+if ! git config --file .gitmodules --get-regexp path | grep -q "$SUBMODULE_PATH"; then
+  echo "Adding submodule '$SUBMODULE_PATH'..."
+  git submodule add "$SUBMODULE_URL" "$SUBMODULE_PATH"
+  git submodule update --init --recursive "$SUBMODULE_PATH"
+  echo "Submodule added successfully."
+else
+  echo "Submodule '$SUBMODULE_PATH' already exists."
+  git submodule update --init --recursive "$SUBMODULE_PATH"
+fi
+
+# Run update logic if -u flag was passed
 if [ "$UPDATE_ONLY" = true ]; then
   update_submodule
 fi
 
-# Check if submodule exists, otherwise add it
-if git config --file .gitmodules --get-regexp path | grep -q "$SUBMODULE_PATH"; then
-  echo "Submodule '$SUBMODULE_PATH' already exists. Skipping add."
-else
-  echo "Adding submodule '$SUBMODULE_PATH'..."
-  git submodule add "$SUBMODULE_URL" "$SUBMODULE_PATH"
-  echo "Submodule added successfully."
-fi
-
-git submodule update --init --recursive "$SUBMODULE_PATH"
-
-# Check if mflowgen is on the user's PATH
+# Check if mflowgen is available; run setup if missing
 if ! command -v mflowgen &> /dev/null; then
   echo "'mflowgen' not found in PATH. Running setup script..."
   cd "$SUBMODULE_PATH" || exit 1
   source run_setup.sh
-  cd - >/dev/null
+  cd - >/dev/null || exit 1
 else
   echo "'mflowgen' already available on PATH. Skipping setup."
 fi
 
-# Define alias for convenience (only for current shell)
+# Define alias for convenience
 alias better_mflowgen='python3 $(pwd)/better-mflowgen/automated_run.py'
 
 echo "Setup complete. You can now run 'better_mflowgen' directly."
