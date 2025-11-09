@@ -5,6 +5,8 @@ SUBMODULE_URL="https://github.com/thedubbers9/better-mflowgen-repo.git"
 
 UPDATE_ONLY=false
 
+ORIG_DIR=$(pwd)
+
 # Parse command-line options
 while getopts "u" opt; do
   case $opt in
@@ -82,3 +84,6 @@ fi
 alias better_mflowgen='python3 $(pwd)/better-mflowgen/automated_run.py'
 
 echo "Setup complete. You can now run 'better_mflowgen' directly."
+
+# Return to original directory
+cd "$ORIG_DIR"
